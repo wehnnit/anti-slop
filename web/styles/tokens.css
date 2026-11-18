@@ -1,0 +1,93 @@
+:root {
+  color-scheme: light;
+
+  --paper: #f2ede3;
+  --paper-raised: #fbf8f1;
+  --paper-sunk: #e8e0d1;
+  --ink: #17150f;
+  --ink-soft: #454137;
+  --ink-muted: #797263;
+  --ink-faint: #a49b8a;
+
+  --rule: rgba(23, 21, 15, 0.13);
+  --rule-strong: rgba(23, 21, 15, 0.3);
+
+  --accent: #c3402a;
+  --accent-ink: #8d2b18;
+  --accent-wash: rgba(195, 64, 42, 0.09);
+
+  --ok: #2c6642;
+  --ok-wash: rgba(44, 102, 66, 0.1);
+  --warn: #8a6413;
+  --warn-wash: rgba(138, 100, 19, 0.11);
+  --danger: #a02b1c;
+  --danger-wash: rgba(160, 43, 28, 0.09);
+
+  --shadow-1: 0 1px 0 rgba(23, 21, 15, 0.05), 0 10px 26px -20px rgba(23, 21, 15, 0.5);
+  --shadow-2: 0 1px 2px rgba(23, 21, 15, 0.07), 0 24px 48px -32px rgba(23, 21, 15, 0.55);
+
+  --font-display: 'Iowan Old Style', 'Charter', 'Palatino Linotype', Palatino, Georgia, serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  --t-xs: 0.6875rem;
+  --t-sm: 0.8125rem;
+  --t-base: 0.9375rem;
+  --t-md: 1.0625rem;
+  --t-lg: 1.375rem;
+  --t-xl: 2rem;
+  --t-2xl: 2.875rem;
+  --t-3xl: 3.75rem;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --s-9: 96px;
+
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 8px;
+  --r-pill: 999px;
+
+  --dur: 140ms;
+  --dur-slow: 220ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+  --shell-max: 1200px;
+  --measure: 66ch;
+  --gutter: var(--s-5);
+}
+
+[data-theme='ink'] {
+  color-scheme: dark;
+
+  --paper: #16150f;
+  --paper-raised: #1e1c16;
+  --paper-sunk: #100f0b;
+  --ink: #f2ede3;
+  --ink-soft: #c9c2b2;
+  --ink-muted: #958d7c;
+  --ink-faint: #6b6455;
+
+  --rule: rgba(242, 237, 227, 0.14);
+  --rule-strong: rgba(242, 237, 227, 0.32);
+
+  --accent: #e2664c;
+  --accent-ink: #f08a74;
+  --accent-wash: rgba(226, 102, 76, 0.13);
+
+  --ok: #7fb08c;
+  --ok-wash: rgba(127, 176, 140, 0.13);
+  --warn: #d3a94a;
+  --warn-wash: rgba(211, 169, 74, 0.13);
+  --danger: #e07a68;
+  --danger-wash: rgba(224, 122, 104, 0.13);
+
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4), 0 12px 30px -22px rgba(0, 0, 0, 0.9);
+  --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 28px 52px -34px rgba(0, 0, 0, 0.95);
+}

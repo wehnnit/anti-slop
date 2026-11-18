@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" color="#17150f" role="img" aria-labelledby="brandTitle">
+  <title id="brandTitle">Anti-Slop</title>
+  <defs>
+    <mask id="stack" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <g fill="#000"><rect x="10" y="12" width="44" height="8"/><rect x="10" y="28" width="44" height="8"/><rect x="10" y="44" width="44" height="8"/><path d="M -12.54 69.46 L 69.46 -12.54 L 76.54 -5.46 L -5.46 76.54 Z"/></g>
+    </mask>
+  </defs>
+  <rect width="64" height="64" fill="#17150f"/>
+  <g fill="#f2ede3"><rect x="10" y="12" width="44" height="8"/><rect x="10" y="28" width="44" height="8"/><rect x="10" y="44" width="44" height="8"/></g>
+  <path fill="#c3402a" d="M -12.54 69.46 L 69.46 -12.54 L 76.54 -5.46 L -5.46 76.54 Z"/>
+</svg>
