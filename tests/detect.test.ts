@@ -46,6 +46,13 @@ describe('walkDotFolders', () => {
     expect(found.get('hermes')).toBeUndefined();
   });
 
+  it('ignores a folder that happens to carry the tool name', () => {
+    const home = homeWith({ '.weird/deepai/.keep': '', '.weird2/bin/deepai': '#!/bin/sh\n' });
+    const found = walkDotFolders(new Set(['deepai']), 2000, home);
+    // The directory must be walked past, not reported as an install.
+    expect(found.get('deepai')).toEqual([join(home, '.weird2/bin/deepai')]);
+  });
+
   it('does not descend past three levels', () => {
     const home = homeWith({ '.a/b/c/d/deepai': '#!/bin/sh\n' });
     const found = walkDotFolders(new Set(['deepai']), 2000, home);

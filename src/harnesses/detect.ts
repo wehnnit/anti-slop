@@ -186,11 +186,12 @@ export function walkDotFolders(wanted: Set<string>, budgetMs = 2500, root = home
     }
     for (const entry of entries) {
       const path = join(dir, entry.name);
-      if (wanted.has(entry.name)) {
-        record(entry.name, path);
-        if (!entry.isDirectory()) continue;
+      if (entry.isDirectory()) {
+        // A folder that happens to carry the tool's name is not the tool.
+        if (depth < 3) queue.push([path, depth + 1]);
+        continue;
       }
-      if (entry.isDirectory() && depth < 3) queue.push([path, depth + 1]);
+      if (wanted.has(entry.name)) record(entry.name, path);
     }
   }
   return hits;
