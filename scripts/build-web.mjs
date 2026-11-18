@@ -1,8 +1,11 @@
 import { build } from 'esbuild';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+// fileURLToPath, not URL.pathname: the install path contains a space
+// ("Application Support"), which pathname would leave percent-encoded.
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const outdir = join(root, 'web/dist');
 
 await mkdir(outdir, { recursive: true });

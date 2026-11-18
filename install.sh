@@ -63,7 +63,6 @@ stage_source() {
 
 build() {
   step "build" "installing dependencies"
-  ( cd "$INSTALL_DIR" && npm install --omit=dev --no-audit --no-fund >/dev/null 2>&1 ) || true
   ( cd "$INSTALL_DIR" && npm install --no-audit --no-fund >/dev/null 2>&1 ) || fail "npm install failed inside $INSTALL_DIR."
   step "build" "compiling server and dashboard"
   ( cd "$INSTALL_DIR" && npm run build >/dev/null 2>&1 ) || fail "Build failed. Run \"npm run build\" in $INSTALL_DIR to see the error."
