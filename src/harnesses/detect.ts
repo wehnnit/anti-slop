@@ -117,6 +117,97 @@ function findApp(bundleName: string): string | undefined {
   return undefined;
 }
 
+// Spotlight indexes the whole disk, so it finds an install anywhere the user
+// put it: a secondary drive, a tools folder, a Homebrew cellar. It does not
+// index files inside dotfolders, so callers pair this with walkDotFolders.
+async function spotlight(name: string): Promise<string[]> {
+  const query = `kMDItemFSName == "${name}"cw`;
+  const [apps, files] = await Promise.all([
+    run('/usr/bin/mdfind', [`${query} && kMDItemContentType == "com.apple.application-bundle"`], 3000),
+    run('/usr/bin/mdfind', [`${query} && kMDItemContentType == "public.unix-executable"`], 3000),
+  ]);
+  const found = [apps, files]
+    .filter((r) => r.ok && r.out)
+    .flatMap((r) => r.out.split('\n'))
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  // mdfind is unsorted; prefer the shortest path, which is the install most
+  // people mean when two copies exist.
+  return [...new Set(found)].sort((a, b) => a.length - b.length);
+}
+
+// Dotted setup folders are invisible to Spotlight but are exactly where
+// installers drop their CLI. Walking only those keeps this to a few hundred
+// milliseconds instead of a full disk crawl.
+//
+// Every candidate is indexed in one pass: which harness asks first is an
+// accident of scheduling, and a cache keyed on that would starve the others.
+// The result is held briefly so a dashboard that re-checks after an install
+// still notices the new tool.
+const DOT_FOLDER_TTL_MS = 30_000;
+let dotFolderCache: { at: number; index: Map<string, string[]> } | undefined;
+
+function dotFolderIndex(): Map<string, string[]> {
+  const fresh = dotFolderCache && Date.now() - dotFolderCache.at < DOT_FOLDER_TTL_MS;
+  if (!dotFolderCache || !fresh) {
+    const wanted = new Set(candidates.map((candidate) => candidate.command));
+    dotFolderCache = { at: Date.now(), index: walkDotFolders(wanted) };
+  }
+  return dotFolderCache.index;
+}
+
+export function walkDotFolders(wanted: Set<string>, budgetMs = 2500, root = home): Map<string, string[]> {
+  const deadline = Date.now() + budgetMs;
+  const hits = new Map<string, string[]>();
+  const record = (name: string, path: string) => {
+    const list = hits.get(name);
+    if (list) list.push(path);
+    else hits.set(name, [path]);
+  };
+
+  let queue: [string, number][];
+  try {
+    queue = readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith('.') && entry.name !== '..')
+      .map((entry) => [join(root, entry.name), 1] as [string, number]);
+  } catch {
+    return hits;
+  }
+  while (queue.length > 0) {
+    if (Date.now() > deadline) break;
+    const next = queue.shift();
+    if (!next) break;
+    const [dir, depth] = next;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (wanted.has(entry.name)) {
+        record(entry.name, path);
+        if (!entry.isDirectory()) continue;
+      }
+      if (entry.isDirectory() && depth < 3) queue.push([path, depth + 1]);
+    }
+  }
+  return hits;
+}
+
+// A harness may live in several places at once. Ask every source we have and
+// take the first answer that exists, so the reported path is one the helpers
+// below can actually run.
+export async function findMacWide(name: string): Promise<{ command?: string; app?: string }> {
+  const [apps, index] = await Promise.all([spotlight(name), Promise.resolve(dotFolderIndex())]);
+  const files = index.get(name) ?? [];
+  const bundles = apps.filter((path) => path.endsWith('.app'));
+  const executables = [...files, ...apps.filter((path) => !path.endsWith('.app'))];
+  const command = executables.find((path) => existsSync(path));
+  return { ...(command ? { command } : {}), ...(bundles[0] ? { app: bundles[0] } : {}) };
+}
+
 function findScript(paths: string[] | undefined): string | undefined {
   if (!paths) return undefined;
   for (const path of paths) {
@@ -163,7 +254,7 @@ async function resolveOne(candidate: Candidate): Promise<DetectionEntry> {
     ...(candidate.note ? { note: candidate.note } : {}),
   };
 
-  const app = candidate.appBundles?.map(findApp).find(Boolean);
+  let app = candidate.appBundles?.map(findApp).find(Boolean);
   let command = await onPath(candidate.command);
   let location: string | undefined;
 
@@ -181,6 +272,17 @@ async function resolveOne(candidate: Candidate): Promise<DetectionEntry> {
       command = swept;
       location = swept;
     }
+  }
+
+  // Last resort, and the only step that looks outside the usual places: ask
+  // Spotlight and the dotfolders where else this tool might be living.
+  if (!command) {
+    const wide = await findMacWide(candidate.command);
+    if (wide.command) {
+      command = wide.command;
+      location = wide.command;
+    }
+    app = app ?? wide.app;
   }
 
   if (!command) {

@@ -42,7 +42,7 @@ Three steps, each one screen.
 
 **3. Put people on duty.** An assignment is a named teammate with a role — planner, builder, reviewer, or any — pointed at one model or one CLI. Give them names you will recognise in the run log. That roster is the only thing that can execute work.
 
-The same screen detects agents already on your machine, wherever the installer put them: Codex, Claude Code, OpenCode, Hermes, Cursor, and DeepAI Code. It looks on `PATH`, in the usual app folders, and one level into the dotfolders in your home directory, because that is where these tools tend to land.
+The same screen detects agents already on your machine, wherever they are: Codex, Claude Code, OpenCode, Hermes, Cursor, and DeepAI Code. It starts with `PATH` and the usual app folders, then searches the rest of the Mac — Spotlight covers anything you installed somewhere unusual, and a short walk through the dotfolders catches the tools that hide their own launcher where Spotlight cannot see it. Detection costs about half a second and never fails a page load if a tool is missing.
 
 Authorizing a CLI is a checkbox. It runs as a subprocess in your project folder with the prompt as its argument, uses whatever credentials it already has, and Anti Slop never reads them.
 
