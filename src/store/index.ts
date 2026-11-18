@@ -7,6 +7,7 @@ import type {
   HarnessModel,
   HarnessRecord,
   ModelEntry,
+  ProjectRecord,
   ProviderRecord,
   RunEvent,
   RunRecord,
@@ -48,6 +49,7 @@ interface Collections {
   harnesses: HarnessRecord[];
   harnessModels: HarnessModel[];
   assignments: Assignment[];
+  projects: ProjectRecord[];
   settings: Settings;
 }
 
@@ -57,6 +59,7 @@ const collectionFile: Record<keyof Collections, string> = {
   harnesses: 'harnesses.json',
   harnessModels: 'harness-models.json',
   assignments: 'assignments.json',
+  projects: 'projects.json',
   settings: 'settings.json',
 };
 
@@ -98,6 +101,18 @@ export function listAssignments(): Assignment[] {
 
 export function getSettings(): Settings {
   return readCollection('settings');
+}
+
+export function listProjects(): ProjectRecord[] {
+  return readCollection('projects');
+}
+
+export function getProject(id: string): ProjectRecord | undefined {
+  return listProjects().find((project) => project.id === id);
+}
+
+export function writeProjects(projects: ProjectRecord[]): void {
+  writeCollection('projects', projects);
 }
 
 type SecretMap = Record<string, string>;
@@ -251,15 +266,93 @@ export function ensureLayout(): void {
   mkdirSync(getSettings().workspaceRoot, { recursive: true });
 }
 
-export function listDirectories(target: string): { path: string; parent: string; dirs: { name: string; path: string }[] } {
+// Markers that make a folder look like a coding project rather than a random
+// directory. Used only to hint, never to block: any folder can be picked.
+const projectMarkers = [
+  '.git',
+  'package.json',
+  'Cargo.toml',
+  'go.mod',
+  'pyproject.toml',
+  'requirements.txt',
+  'Gemfile',
+  'pom.xml',
+  'build.gradle',
+  'CMakeLists.txt',
+  'deno.json',
+  'composer.json',
+];
+
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  looksLikeProject: boolean;
+}
+
+export interface DirectoryListing {
+  path: string;
+  parent: string;
+  dirs: DirectoryEntry[];
+  looksLikeProject: boolean;
+  hiddenCount: number;
+}
+
+// A lone package.json proves little: plenty of home folders have one lying
+// around. Treat that as a hint only, and require corroboration before calling
+// a folder a project.
+function detectProject(dir: string): boolean {
+  if (existsSync(join(dir, '.git'))) return true;
+  let count = 0;
+  for (const marker of projectMarkers) {
+    if (existsSync(join(dir, marker))) count += 1;
+  }
+  if (count >= 2) return true;
+  if (count === 1) {
+    return ['src', 'lib', 'app', 'packages', 'app.asar'].some((name) => existsSync(join(dir, name)));
+  }
+  return false;
+}
+
+export function listDirectories(target: string, showHidden = false): DirectoryListing {
   const resolved = resolve(target);
-  const entries = existsSync(resolved) ? readdirSync(resolved, { withFileTypes: true }) : [];
-  const dirs = entries
-    .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-    .map((e) => ({ name: e.name, path: join(resolved, e.name) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  let entries: { name: string; isDirectory(): boolean }[] = [];
+  try {
+    entries = existsSync(resolved) ? readdirSync(resolved, { withFileTypes: true }) : [];
+  } catch {
+    entries = [];
+  }
+  // Counted only when they are being left out, because the number tells the
+  // reader how much is still hidden from them.
+  let hiddenCount = 0;
+  const dirs: DirectoryEntry[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith('.') && !showHidden) {
+      hiddenCount += 1;
+      continue;
+    }
+    const path = join(resolved, entry.name);
+    dirs.push({ name: entry.name, path, looksLikeProject: detectProject(path) });
+  }
+  dirs.sort((a, b) => {
+    if (a.looksLikeProject !== b.looksLikeProject) return a.looksLikeProject ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
   const parent = resolved === sep ? sep : resolve(resolved, '..');
-  return { path: resolved, parent, dirs };
+  return { path: resolved, parent, dirs, looksLikeProject: detectProject(resolved), hiddenCount };
+}
+
+// Places worth offering before the user has picked anything. Missing ones are
+// dropped rather than shown broken, so a fresh Mac still gets a usable list.
+export function commonPlaces(): DirectoryEntry[] {
+  const home = homedir();
+  const names = ['Desktop', 'Documents', 'Downloads', 'Developer', 'Projects', 'Code', 'src', 'repos', 'workspace'];
+  const places: DirectoryEntry[] = [{ name: 'Home', path: home, looksLikeProject: detectProject(home) }];
+  for (const name of names) {
+    const path = join(home, name);
+    if (existsSync(path)) places.push({ name, path, looksLikeProject: detectProject(path) });
+  }
+  return places;
 }
 
 export { removeFile };

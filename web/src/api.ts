@@ -5,6 +5,7 @@ import type {
   HarnessModel,
   HarnessRecord,
   ModelEntry,
+  ProjectRecord,
   ProviderRecord,
   RunEvent,
   RunRecord,
@@ -22,6 +23,7 @@ export type {
   HarnessModel,
   HarnessRecord,
   ModelEntry,
+  ProjectRecord,
   ProviderRecord,
   RunEvent,
   RunRecord,
@@ -58,6 +60,7 @@ export interface Overview {
   settings: Settings;
   recentRuns: RunRecord[];
   team: TeamMemberView[];
+  projects: ProjectRecord[];
 }
 
 export interface TestResult {
@@ -67,10 +70,22 @@ export interface TestResult {
   message: string;
 }
 
+export interface DirEntry {
+  name: string;
+  path: string;
+  looksLikeProject: boolean;
+}
+
 export interface DirListing {
   path: string;
   parent: string;
-  dirs: { name: string; path: string }[];
+  dirs: DirEntry[];
+  looksLikeProject: boolean;
+  hiddenCount: number;
+}
+
+export interface Places {
+  home: DirEntry[];
 }
 
 declare global {
@@ -164,7 +179,15 @@ export const api = {
 
   detectHarnesses: () => request<DetectionEntry[]>('GET', '/harnesses/detect'),
   harnesses: () => request<HarnessRecord[]>('GET', '/harnesses'),
-  createHarness: (body: { kind: HarnessKind; label: string; command: string; argsTemplate?: string; version?: string }) =>
+  createHarness: (body: {
+    kind: HarnessKind;
+    label: string;
+    command: string;
+    argsTemplate?: string;
+    version?: string;
+    mode?: 'headless' | 'session';
+    location?: string;
+  }) =>
     request<HarnessRecord>('POST', '/harnesses', body),
   updateHarness: (id: string, body: Partial<{ label: string; command: string; argsTemplate: string }>) =>
     request<HarnessRecord>('PATCH', `/harnesses/${id}`, body),
@@ -194,8 +217,20 @@ export const api = {
   deleteRun: (id: string) => request<{ ok: true }>('DELETE', `/runs/${id}`),
   events: (id: string, since = 0) => request<RunEvent[]>('GET', `/runs/${id}/events?since=${since}`),
 
-  fs: (path?: string) =>
-    request<DirListing>('GET', `/fs${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  fs: (path?: string, hidden = false) => {
+    const query = new URLSearchParams();
+    if (path) query.set('path', path);
+    if (hidden) query.set('hidden', '1');
+    const suffix = query.toString();
+    return request<DirListing>('GET', suffix ? '/fs?' + suffix : '/fs');
+  },
+  places: () => request<Places>('GET', '/fs/places'),
+
+  projects: () => request<ProjectRecord[]>('GET', '/projects'),
+  createProject: (body: { path: string; label?: string }) => request<ProjectRecord>('POST', '/projects', body),
+  updateProject: (id: string, body: { label?: string; path?: string }) =>
+    request<ProjectRecord>('PATCH', '/projects/' + id, body),
+  deleteProject: (id: string) => request<{ ok: true }>('DELETE', '/projects/' + id),
 
   subscribe: (onEvent: (ev: RunEvent) => void): (() => void) => {
     const source = new EventSource('/api/events');

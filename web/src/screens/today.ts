@@ -1,12 +1,12 @@
 import { ago, toast } from '../ui.js';
 import { api } from '../api.js';
-import type { Overview, RunRecord } from '../api.js';
+import type { Overview, ProjectRecord, RunRecord } from '../api.js';
+import { folderPicker } from './folder-picker.js';
 import {
   button,
   el,
   excerpt,
   failure,
-  iconButton,
   isLive,
   linkButton,
   micro,
@@ -40,13 +40,47 @@ async function load(ctx: ScreenContext, isDisposed: () => boolean): Promise<void
 }
 
 function draw(ctx: ScreenContext, overview: Overview): void {
-  let workspace = overview.settings.workspaceRoot || '';
+  let projects: ProjectRecord[] = overview.projects.slice();
+  const findProject = (id?: string): ProjectRecord | undefined => projects.find((item) => item.id === id);
+  const active = findProject(overview.settings.activeProjectId);
+  let workspace = active?.path || overview.settings.workspaceRoot || '';
   let sending = false;
 
-  const workspaceValue = el('span', { class: 'today-workspace-value' }, workspace || 'No folder selected');
-  const browser = workspaceBrowser(workspace, (picked) => {
-    workspace = picked;
-    workspaceValue.textContent = picked;
+  // The stock support-folder workspace is a placeholder, not a project. Name it
+  // honestly so nobody thinks the team is working in their code.
+  const workspaceName = el('span', { class: 'today-workspace-name' });
+  const workspacePath = el('span', { class: 'today-workspace-path' });
+  const showWorkspace = (project?: ProjectRecord, path?: string): void => {
+    if (project) {
+      workspaceName.textContent = project.label;
+      workspacePath.textContent = project.path;
+      return;
+    }
+    const value = path ?? workspace;
+    const placeholder = !value || value.includes('/Application Support/');
+    workspaceName.textContent = placeholder ? 'No project folder yet' : value.split('/').filter(Boolean).pop() ?? value;
+    workspacePath.textContent = placeholder ? 'Choose a folder so the team knows where to work' : value;
+  };
+  showWorkspace(active);
+
+  const picker = folderPicker({
+    current: active?.path,
+    existing: projects,
+    onChoose: (path, project) => {
+      workspace = path;
+      if (project && !projects.some((item) => item.id === project.id)) projects.push(project);
+      showWorkspace(project, path);
+      // Remembered on the server, so reopening the dashboard lands here again.
+      void api.saveSettings({
+        workspaceRoot: path,
+        ...(project ? { activeProjectId: project.id } : {}),
+      });
+    },
+    onProjectsChanged: () => {
+      void api.projects().then((list) => {
+        projects = list;
+      });
+    },
   });
 
   const composer = el(
@@ -54,7 +88,7 @@ function draw(ctx: ScreenContext, overview: Overview): void {
     { class: 'today-composer' },
     el('div', { class: 'today-composer-head' }, micro('New run'), el('span', { class: 'today-rule' })),
     ...composerBody({
-      onWorkspace: () => browser.toggle(),
+      onWorkspace: () => picker.toggle(),
       getWorkspace: () => workspace,
       isSending: () => sending,
       setSending: (value) => {
@@ -62,8 +96,13 @@ function draw(ctx: ScreenContext, overview: Overview): void {
       },
       go: ctx.go,
     }),
-    browser.element,
-    el('div', { class: 'today-composer-foot' }, el('span', { class: 'today-workspace-label' }, 'Workspace'), workspaceValue),
+    picker.element,
+    el(
+      'div',
+      { class: 'today-composer-foot' },
+      el('span', { class: 'today-workspace-label' }, 'Working in'),
+      el('span', { class: 'today-workspace' }, workspaceName, workspacePath),
+    ),
   );
 
   ctx.mount.replaceChildren(
@@ -180,78 +219,6 @@ function composerBody(handlers: ComposerHandlers): HTMLElement[] {
     ),
     el('div', { class: 'today-composer-tools' }, linkButton('Choose folder', handlers.onWorkspace)),
   ];
-}
-
-function workspaceBrowser(initialPath: string, onPick: (path: string) => void) {
-  const element = el('section', { class: 'today-browser', hidden: true, 'aria-label': 'Workspace folder' });
-  const crumb = el('p', { class: 'today-browser-path' }, initialPath || 'Home');
-  const list = el('div', { class: 'today-browser-list' });
-  let current = initialPath;
-  let parent = '';
-
-  const open = async (path: string): Promise<void> => {
-    list.replaceChildren(el('p', { class: 'today-browser-note' }, 'Reading folders'));
-    try {
-      const result = await api.fs(path);
-      current = result.path;
-      parent = result.parent;
-      crumb.textContent = result.path;
-      if (!result.dirs.length) {
-        list.replaceChildren(el('p', { class: 'today-browser-note' }, 'No folders inside. You can still use this one.'));
-        return;
-      }
-      list.replaceChildren(
-        ...result.dirs.map((dir) =>
-          el(
-            'button',
-            { type: 'button', class: 'today-browser-row', 'on:click': () => void open(dir.path) },
-            el('span', { class: 'today-browser-row-name' }, dir.name),
-            el('span', { class: 'today-browser-row-slash', 'aria-hidden': 'true' }, '/'),
-          ),
-        ),
-      );
-    } catch (err) {
-      list.replaceChildren(failure(err, () => void open(path)));
-    }
-  };
-
-  element.append(
-    el(
-      'div',
-      { class: 'today-browser-head' },
-      micro('Folders'),
-      el(
-        'div',
-        { class: 'today-browser-controls' },
-        iconButton('Parent folder', 'M8 13V3M4 7l4-4 4 4', () => void open(parent || current)),
-        linkButton('Close', () => {
-          element.hidden = true;
-        }),
-      ),
-    ),
-    crumb,
-    list,
-    el(
-      'div',
-      { class: 'today-browser-foot' },
-      button(
-        'Use this folder',
-        () => {
-          onPick(current);
-          element.hidden = true;
-        },
-        { variant: 'primary' },
-      ),
-    ),
-  );
-
-  return {
-    element,
-    toggle(): void {
-      element.hidden = !element.hidden;
-      if (!element.hidden) void open(current);
-    },
-  };
 }
 
 interface ReadinessItem {

@@ -5,6 +5,7 @@ import type {
   HarnessRecord,
   HarnessKind,
   ModelEntry,
+  ProjectRecord,
   ProviderFlavor,
   ProviderRecord,
   RunRecord,
@@ -17,12 +18,14 @@ import { bad, bool, int, notFound, optStr, record, str } from './http.js';
 import type { Ctx } from './http.js';
 import {
   VERSION,
+  getProject,
   getSettings,
   listAssignments,
   listDirectories,
   listHarnesses,
   listHarnessModels,
   listModels,
+  listProjects,
   listProviders,
   listRuns,
   deleteRun,
@@ -36,6 +39,8 @@ import {
   rootPath,
   setProviderSecret,
   writeCollection,
+  writeProjects,
+  commonPlaces,
 } from '../store/index.js';
 import { cancelRun, listTeam, startRun } from '../engine/index.js';
 import { detectHarnesses } from '../harnesses/detect.js';
@@ -56,10 +61,11 @@ export interface Overview {
   settings: Settings;
   recentRuns: RunRecord[];
   team: TeamMemberView[];
+  projects: ProjectRecord[];
 }
 
 const flavors: ProviderFlavor[] = ['openai', 'anthropic'];
-const harnessKinds: HarnessKind[] = ['codex', 'claude', 'opencode', 'hermes', 'cursor', 'custom'];
+const harnessKinds: HarnessKind[] = ['codex', 'claude', 'opencode', 'hermes', 'cursor', 'deepai', 'custom'];
 const roles: TeamRole[] = ['planner', 'builder', 'reviewer', 'any'];
 
 function pickFlavor(input: unknown, fallback: ProviderFlavor = 'openai'): ProviderFlavor {
@@ -159,6 +165,7 @@ export const router = new Router()
       settings,
       recentRuns: runs.slice(0, 6),
       team,
+      projects: listProjects(),
     };
   })
   .get('/api/providers', () => listProviders().map(providerView))
@@ -302,6 +309,8 @@ export const router = new Router()
       command: str(body.command, 'Command', 400),
       argsTemplate: optStr(body.argsTemplate, 'Arguments template', 600),
       version: optStr(body.version, 'Version', 80),
+      mode: body.mode === 'session' ? 'session' : 'headless',
+      location: optStr(body.location, 'Location', 600),
       createdAt: nowIso(),
     };
     writeCollection('harnesses', [...listHarnesses(), harness]);
@@ -455,6 +464,17 @@ export const router = new Router()
         next.plannerAssignmentId = undefined;
       }
     }
+    if (body.activeProjectId !== undefined) {
+      const id = optStr(body.activeProjectId, 'Project', 80);
+      if (id) {
+        const project = getProject(id);
+        if (!project) throw bad('That project folder is not saved any more.');
+        next.activeProjectId = project.id;
+        next.workspaceRoot = project.path;
+      } else {
+        next.activeProjectId = undefined;
+      }
+    }
     next.updatedAt = nowIso();
     writeCollection('settings', next);
     return next;
@@ -495,8 +515,52 @@ export const router = new Router()
     return { ok: true };
   })
   .get('/api/fs', (ctx) => {
-    const target = ctx.url.searchParams.get('path') ?? process.cwd();
-    return listDirectories(target);
+    const target = ctx.url.searchParams.get('path') ?? getSettings().workspaceRoot;
+    const showHidden = ctx.url.searchParams.get('hidden') === '1';
+    return listDirectories(target, showHidden);
+  })
+  .get('/api/fs/places', () => ({ home: commonPlaces() }))
+  .get('/api/projects', () => listProjects())
+  .post('/api/projects', (ctx) => {
+    const body = (ctx.body ?? {}) as Record<string, unknown>;
+    const workspace = resolveWorkspace(str(body.path, 'Folder', 600));
+    if (!workspace.ok) throw bad(workspace.message ?? 'That folder cannot be used.');
+    const existing = listProjects().find((project) => project.path === workspace.path);
+    if (existing) return existing;
+    const label = optStr(body.label, 'Label', 80) ?? workspace.path.split('/').filter(Boolean).pop() ?? workspace.path;
+    const project: ProjectRecord = {
+      id: newId('prj'),
+      label,
+      path: workspace.path,
+      createdAt: nowIso(),
+    };
+    writeProjects([...listProjects(), project]);
+    return project;
+  })
+  .patch('/api/projects/:id', (ctx) => {
+    const project = listProjects().find((item) => item.id === ctx.params.id);
+    if (!project) throw notFound('Project');
+    const body = (ctx.body ?? {}) as Record<string, unknown>;
+    const next: ProjectRecord = { ...project };
+    if (body.label !== undefined) next.label = str(body.label, 'Label', 80);
+    if (body.path !== undefined) {
+      const workspace = resolveWorkspace(str(body.path, 'Folder', 600));
+      if (!workspace.ok) throw bad(workspace.message ?? 'That folder cannot be used.');
+      next.path = workspace.path;
+    }
+    writeProjects(listProjects().map((item) => (item.id === project.id ? next : item)));
+    return next;
+  })
+  .delete('/api/projects/:id', (ctx) => {
+    const project = listProjects().find((item) => item.id === ctx.params.id);
+    if (!project) throw notFound('Project');
+    writeProjects(listProjects().filter((item) => item.id !== project.id));
+    const settings = getSettings();
+    if (settings.activeProjectId === project.id) {
+      const { activeProjectId: _dropped, ...rest } = settings;
+      writeCollection('settings', { ...rest, updatedAt: nowIso() } as unknown as Settings);
+    }
+    return { ok: true };
   });
 
 export type { Ctx };

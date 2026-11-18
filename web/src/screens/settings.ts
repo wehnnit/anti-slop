@@ -1,6 +1,7 @@
 import { ago, copyText, toast } from '../ui.js';
 import { api } from '../api.js';
-import type { Assignment, Overview, Settings } from '../api.js';
+import type { Assignment, Overview, ProjectRecord, Settings } from '../api.js';
+import { folderPicker } from './folder-picker.js';
 import {
   button,
   callout,
@@ -74,6 +75,7 @@ function draw(ctx: ScreenContext, loaded: Loaded): void {
           { class: 'settings-main' },
           workSection(loaded, save),
           planningSection(loaded, save),
+          projectsSection(loaded, ctx),
           dangerSection(loaded),
         ),
         el('aside', { class: 'settings-side' }, aboutSection(loaded)),
@@ -165,6 +167,85 @@ function workSection(loaded: Loaded, save: (patch: Partial<Settings>, message: s
   );
 }
 
+function projectsSection(loaded: Loaded, ctx: ScreenContext): HTMLElement {
+  const projects: ProjectRecord[] = loaded.overview.projects.slice();
+  const list = el('div', { class: 'settings-projects' });
+
+  const picker = folderPicker({
+    current: loaded.overview.projects.find((item) => item.id === loaded.settings.activeProjectId)?.path,
+    existing: projects,
+    onChoose: (path, project) => {
+      if (project) void api.saveSettings({ workspaceRoot: project.path, activeProjectId: project.id });
+      else void api.saveSettings({ workspaceRoot: path });
+      toast('Working folder saved.', 'ok');
+      ctx.refresh();
+    },
+    onProjectsChanged: () => ctx.refresh(),
+  });
+
+  const renderRows = (): void => {
+    list.replaceChildren();
+    if (!projects.length) {
+      list.append(
+        el('p', { class: 'settings-hint' },
+          'No project folders yet. Connect any folder on this Mac and the team will work inside it.'),
+      );
+      return;
+    }
+    for (const project of projects) {
+      const active = loaded.settings.activeProjectId === project.id || loaded.settings.workspaceRoot === project.path;
+      list.append(
+        el(
+          'div',
+          { class: 'settings-project' + (active ? ' settings-project--active' : '') },
+          el(
+            'div',
+            { class: 'settings-project-text' },
+            el('span', { class: 'settings-project-name' }, project.label),
+            el('span', { class: 'settings-project-path' }, project.path),
+          ),
+          active ? el('span', { class: 'settings-project-tag' }, 'in use') : null,
+          el(
+            'div',
+            { class: 'settings-project-actions' },
+            active ? null : button('Use', () => { void use(project); }),
+            button('Forget', () => { void forget(project); }, { variant: 'ghost' }),
+          ),
+        ),
+      );
+    }
+  };
+
+  const use = async (project: ProjectRecord): Promise<void> => {
+    try {
+      await api.saveSettings({ workspaceRoot: project.path, activeProjectId: project.id });
+      toast('Switched to ' + project.label + '.', 'ok');
+      ctx.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not switch project.', 'error');
+    }
+  };
+
+  const forget = async (project: ProjectRecord): Promise<void> => {
+    try {
+      await api.deleteProject(project.id);
+      toast('Removed ' + project.label + ' from the list. The folder itself is untouched.', 'ok');
+      ctx.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not remove that project.', 'error');
+    }
+  };
+
+  renderRows();
+
+  return el(
+    'section',
+    { class: 'settings-block' },
+    sectionHead('Projects', 'Folders on this Mac that the team may work in.', linkButton('Connect a folder', () => picker.toggle())),
+    list,
+    picker.element,
+  );
+}
 function planningSection(loaded: Loaded, save: (patch: Partial<Settings>, message: string) => Promise<void>): HTMLElement {
   const candidates = loaded.assignments.filter((item) => item.enabled);
   const options = [

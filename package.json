@@ -1,6 +1,6 @@
 {
   "name": "anti-slop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local dashboard that turns one prompt into a small team of the models and coding CLIs you authorize.",
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,7 @@
     "build": "npm run build:server && npm run build:web",
     "build:server": "tsc -p tsconfig.json",
     "build:web": "node scripts/build-web.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json",
     "dev": "node scripts/dev.mjs",
     "start": "node bin/antiSL.js",
     "test": "vitest run"

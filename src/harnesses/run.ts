@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import type { HarnessKind, HarnessRecord, HarnessRunRequest, HarnessRunResult } from '../types.js';
 
 interface Invocation {
@@ -73,6 +73,10 @@ const builtinArgs: Record<HarnessKind, (req: HarnessRunRequest) => string[]> = {
   opencode: (req) => ['run', ...(req.model ? ['--model', req.model] : []), req.prompt],
   hermes: (req) => ['run', ...(req.model ? ['--model', req.model] : []), req.prompt],
   cursor: (req) => ['--print', ...(req.model ? ['--model', req.model] : []), req.prompt],
+  // DeepAI Code has no one-shot prompt mode: its CLI only starts a server. The
+  // app subcommand opens that project in the running desktop window, which is
+  // as far as a foreign process can take the work.
+  deepai: (req) => ['app', req.cwd],
   custom: () => [],
 };
 
@@ -87,11 +91,48 @@ export function buildInvocation(harness: HarnessRecord, req: HarnessRunRequest):
   return { command: harness.command, args: builtinArgs[harness.kind](req) };
 }
 
+function exec(command: string, args: string[], cwd: string): Promise<{ code: number; out: string; err: string }> {
+  return new Promise((resolve) => {
+    execFile(command, args, { cwd, timeout: 20_000 }, (error, stdout, stderr) => {
+      const code = error && typeof (error as { code?: number }).code === 'number' ? (error as { code: number }).code : error ? 1 : 0;
+      resolve({ code, out: (stdout ?? '').trim(), err: (stderr ?? '').trim() });
+    });
+  });
+}
+
+// Session harnesses cannot be handed a prompt: they only open a window. Anti-Slop
+// does the part it can do — points the tool at the right folder — and says so
+// plainly instead of claiming the task was carried out.
+async function handOff(harness: HarnessRecord, req: HarnessRunRequest): Promise<HarnessRunResult> {
+  const args = harness.argsTemplate ? fillArgs(harness.argsTemplate, { cwd: req.cwd, prompt: req.prompt }) : ['app', req.cwd];
+  const result = await exec(harness.command, args, req.cwd);
+  if (result.code !== 0) {
+    const detail = result.err || result.out;
+    return {
+      text: '',
+      exitCode: result.code || 1,
+      stderr: `${harness.label} could not be opened on ${req.cwd}. ${detail || 'Open it once by hand, then try again.'}`.trim(),
+    };
+  }
+  const lines = [
+    `Handed off to ${harness.label}.`,
+    `It is open on ${req.cwd}.`,
+    'Send the brief below in its window — this tool has no way to submit a prompt for you.',
+    '',
+    'Brief:',
+    req.prompt,
+  ];
+  return { text: lines.join('\n'), exitCode: 0, stderr: '' };
+}
+
 export async function runHarness(
   harness: HarnessRecord,
   req: HarnessRunRequest,
   timeoutMs = 15 * 60 * 1000,
 ): Promise<HarnessRunResult> {
+  if (harness.mode === 'session' || (harness.kind === 'deepai' && !harness.argsTemplate)) {
+    return handOff(harness, req);
+  }
   const invocation = buildInvocation(harness, req);
 
   return new Promise((resolve) => {

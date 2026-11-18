@@ -3,7 +3,7 @@ type Props = Record<string, unknown>;
 
 const svgNs = 'http://www.w3.org/2000/svg';
 
-function append(el: Element, children: Child[]): void {
+function append(el: Element | DocumentFragment, children: Child[]): void {
   for (const child of children) {
     if (child === null || child === undefined || child === false) continue;
     if (Array.isArray(child)) {

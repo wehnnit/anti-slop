@@ -8,7 +8,13 @@ export type HarnessKind =
   | "opencode"
   | "hermes"
   | "cursor"
+  | "deepai"
   | "custom";
+
+// How a harness takes work. Headless CLIs read one prompt and print one answer,
+// so they can be handed a task and left alone. Session apps open a window you
+// then talk to, so the most Anti-Slop can do is open them on the right folder.
+export type HarnessMode = "headless" | "session";
 
 export type TeamRole = "planner" | "builder" | "reviewer" | "any";
 
@@ -40,6 +46,9 @@ export interface HarnessRecord {
   command: string;
   argsTemplate?: string;
   version?: string;
+  mode?: HarnessMode;
+  // Where on this Mac the harness was found, kept so the dashboard can say so.
+  location?: string;
   createdAt: string;
 }
 
@@ -65,11 +74,22 @@ export interface Assignment {
   createdAt: string;
 }
 
+// A folder on this Mac that the team is allowed to work in. These live in the
+// support folder's data directory, never inside the project itself.
+export interface ProjectRecord {
+  id: Id;
+  label: string;
+  path: string;
+  lastUsedAt?: string;
+  createdAt: string;
+}
+
 export interface Settings {
   plannerAssignmentId?: Id;
   concurrency: number;
   autoReview: boolean;
   workspaceRoot: string;
+  activeProjectId?: Id;
   theme: "paper" | "ink";
   updatedAt: string;
 }
@@ -211,5 +231,10 @@ export interface DetectionEntry {
   installed: boolean;
   command: string;
   version?: string;
+  // Absolute path when the harness was found somewhere off PATH.
+  location?: string;
+  mode: HarnessMode;
+  // Plain-language note about anything the user should know before authorizing.
+  note?: string;
   suggestedModels: string[];
 }

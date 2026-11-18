@@ -55,8 +55,14 @@ function detectedList(detected: DetectionEntry[], refresh: () => void): HTMLElem
           el(
             'div',
             { class: 'team-detected-text' },
-            el('span', { class: 'team-detected-label' }, entry.label),
+            el(
+              'span',
+              { class: 'team-detected-title' },
+              el('span', { class: 'team-detected-label' }, entry.label),
+              entry.mode === 'session' ? el('span', { class: 'team-mode-tag' }, 'session app') : null,
+            ),
             el('span', { class: 'team-detected-command' }, entry.version ? `${entry.command} \u00b7 ${entry.version}` : entry.command),
+            entry.note ? el('span', { class: 'team-detected-note' }, entry.note) : null,
             entry.suggestedModels.length
               ? el('span', { class: 'team-detected-hints' }, entry.suggestedModels.join(', '))
               : null,
@@ -68,6 +74,8 @@ function detectedList(detected: DetectionEntry[], refresh: () => void): HTMLElem
                 label: entry.label,
                 command: entry.command,
                 version: entry.version,
+                mode: entry.mode,
+                location: entry.location,
               });
               toast(`${entry.label} authorized.`, 'ok');
               refresh();
@@ -101,8 +109,20 @@ function harnessBlock(data: TeamData, harness: HarnessRecord, models: HarnessMod
       el(
         'div',
         { class: 'team-harness-id' },
-        el('h3', { class: 'team-harness-label' }, harness.label),
+        el(
+          'h3',
+          { class: 'team-harness-label' },
+          harness.label,
+          harness.mode === 'session' ? el('span', { class: 'team-mode-tag' }, 'session app') : null,
+        ),
         el('p', { class: 'team-harness-command' }, harness.version ? `${harness.command} \u00b7 ${harness.version}` : harness.command),
+        harness.mode === 'session'
+          ? el(
+              'p',
+              { class: 'team-harness-note' },
+              'Anti-Slop opens this app on the project folder and writes the brief into the task. You send the prompt in its window.',
+            )
+          : null,
       ),
       el(
         'div',

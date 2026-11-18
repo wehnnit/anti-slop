@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunningServer } from '../src/server/index.js';
@@ -182,5 +182,109 @@ describe('filesystem browser', () => {
     const body = (await res.json()) as { path: string; dirs: { name: string }[] };
     expect(body.path).toBe(sandbox);
     expect(Array.isArray(body.dirs)).toBe(true);
+  });
+});
+
+describe('project folders', () => {
+  it('saves, lists, renames and forgets a project folder', async () => {
+    const project = join(sandbox, 'clients', 'atlas');
+    mkdirSync(project, { recursive: true });
+
+    const created = await authed('/api/projects', 'POST', { path: project });
+    expect(created.status).toBe(201);
+    const saved = (await created.json()) as { id: string; label: string; path: string };
+    expect(saved.path).toBe(project);
+    expect(saved.label).toBe('atlas');
+
+    const listed = (await (await call('/api/projects')).json()) as { id: string }[];
+    expect(listed.map((item) => item.id)).toContain(saved.id);
+
+    const renamed = await authed(`/api/projects/${saved.id}`, 'PATCH', { label: 'Atlas' });
+    expect(((await renamed.json()) as { label: string }).label).toBe('Atlas');
+
+    const dropped = await authed(`/api/projects/${saved.id}`, 'DELETE');
+    expect(dropped.status).toBe(200);
+    const after = (await (await call('/api/projects')).json()) as { id: string }[];
+    expect(after.map((item) => item.id)).not.toContain(saved.id);
+  });
+
+  it('returns the same record when a folder is already saved', async () => {
+    const project = join(sandbox, 'clients', 'atlas');
+    mkdirSync(project, { recursive: true });
+    const first = (await (await authed('/api/projects', 'POST', { path: project })).json()) as { id: string };
+    const second = (await (await authed('/api/projects', 'POST', { path: project })).json()) as { id: string };
+    expect(second.id).toBe(first.id);
+  });
+
+  it('refuses a folder inside the support directory', async () => {
+    const store = await import('../src/store/index.js');
+    const res = await authed('/api/projects', 'POST', { path: join(store.rootPath(), 'secrets.json') });
+    expect(res.status).toBe(400);
+  });
+
+  it('offers common places and marks project folders in a listing', async () => {
+    const places = (await (await call('/api/fs/places')).json()) as { home: { name: string; path: string }[] };
+    expect(places.home.some((entry) => entry.path === sandbox)).toBe(true);
+
+    mkdirSync(join(sandbox, 'checkout', '.git'), { recursive: true });
+    const listing = (await (await call(`/api/fs?path=${encodeURIComponent(sandbox)}`)).json()) as {
+      looksLikeProject: boolean;
+      dirs: { name: string; looksLikeProject: boolean }[];
+    };
+    expect(listing.looksLikeProject).toBe(false);
+    expect(listing.dirs.find((dir) => dir.name === 'checkout')?.looksLikeProject).toBe(true);
+  });
+
+  it('keeps hidden folders out unless they are asked for', async () => {
+    mkdirSync(join(sandbox, 'visible'), { recursive: true });
+    mkdirSync(join(sandbox, '.dotfolder'), { recursive: true });
+    const plain = (await (await call(`/api/fs?path=${encodeURIComponent(sandbox)}`)).json()) as {
+      dirs: { name: string }[];
+      hiddenCount: number;
+    };
+    expect(plain.dirs.map((dir) => dir.name)).not.toContain('.dotfolder');
+    expect(plain.hiddenCount).toBeGreaterThan(0);
+
+    const wide = (await (await call(`/api/fs?path=${encodeURIComponent(sandbox)}&hidden=1`)).json()) as {
+      dirs: { name: string }[];
+    };
+    expect(wide.dirs.map((dir) => dir.name)).toContain('.dotfolder');
+  });
+});
+
+describe('the project folder in use', () => {
+  it('remembers the chosen folder and moves the workspace with it', async () => {
+    const project = join(sandbox, 'clients', 'atlas');
+    mkdirSync(project, { recursive: true });
+    const saved = (await (await authed('/api/projects', 'POST', { path: project })).json()) as { id: string };
+
+    const updated = await authed('/api/settings', 'PUT', { activeProjectId: saved.id });
+    expect(updated.status).toBe(200);
+    const settings = (await updated.json()) as { activeProjectId?: string; workspaceRoot: string };
+    expect(settings.activeProjectId).toBe(saved.id);
+    expect(settings.workspaceRoot).toBe(project);
+
+    const overview = (await (await call('/api/overview')).json()) as {
+      settings: { activeProjectId?: string };
+      projects: { id: string }[];
+    };
+    expect(overview.settings.activeProjectId).toBe(saved.id);
+    expect(overview.projects.map((item) => item.id)).toContain(saved.id);
+  });
+
+  it('refuses a project id that is not saved', async () => {
+    const res = await authed('/api/settings', 'PUT', { activeProjectId: 'prj_gone' });
+    expect(res.status).toBe(400);
+  });
+
+  it('forgets the folder in use when its record is deleted', async () => {
+    const project = join(sandbox, 'clients', 'teardown');
+    mkdirSync(project, { recursive: true });
+    const saved = (await (await authed('/api/projects', 'POST', { path: project })).json()) as { id: string };
+    await authed('/api/settings', 'PUT', { activeProjectId: saved.id });
+
+    await authed(`/api/projects/${saved.id}`, 'DELETE');
+    const settings = (await (await call('/api/settings')).json()) as { activeProjectId?: string };
+    expect(settings.activeProjectId).toBeUndefined();
   });
 });

@@ -94,6 +94,36 @@ describe('buildInvocation', () => {
     expect(invocation.args).toContain('--model');
     expect(invocation.args).toContain('claude-sonnet-4-5');
   });
+
+  it('points DeepAI Code at the folder instead of passing it a prompt', () => {
+    const invocation = buildInvocation(record({ kind: 'deepai' }), { prompt: 'ship it', cwd });
+    expect(invocation.args).toEqual(['app', cwd]);
+    expect(invocation.args).not.toContain('ship it');
+  });
+});
+
+describe('session harnesses', () => {
+  it('hands off to the app and says plainly that the prompt was not sent', async () => {
+    const result = await runHarness(
+      record({ kind: 'deepai', mode: 'session', command: process.execPath, argsTemplate: '-e "process.exit(0)"' }),
+      { prompt: 'tidy the imports', cwd },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.text).toContain('Handed off');
+    expect(result.text).toContain('tidy the imports');
+    expect(result.text).toContain('no way to submit a prompt for you');
+  });
+
+  it('reports a missing app rather than claiming success', async () => {
+    const result = await runHarness(
+      record({ kind: 'deepai', mode: 'session', command: join(cwd, 'not-here') }),
+      { prompt: 'go', cwd },
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('could not be opened on');
+  });
 });
 
 describe('runHarness', () => {

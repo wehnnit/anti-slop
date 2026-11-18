@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { appendFileSync, existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -171,5 +171,96 @@ describe('workspace guard', () => {
     const result = store.resolveWorkspace('~/code');
     expect(result.ok).toBe(true);
     expect(result.path).toBe(join(sandbox, 'code'));
+  });
+});
+
+describe('project folders', () => {
+  it('starts empty and round-trips what is written', async () => {
+    const store = await loadStore();
+    store.ensureLayout();
+    expect(store.listProjects()).toEqual([]);
+    store.writeProjects([
+      { id: 'prj_1', label: 'Atlas', path: join(sandbox, 'atlas'), createdAt: new Date().toISOString() },
+    ]);
+    expect(store.listProjects()).toHaveLength(1);
+    expect(store.getProject('prj_1')?.label).toBe('Atlas');
+    expect(store.getProject('prj_missing')).toBeUndefined();
+  });
+});
+
+describe('listing directories', () => {
+  it('keeps the folder itself, its parent and only real folders', async () => {
+    const store = await loadStore();
+    store.ensureLayout();
+    const root = join(sandbox, 'work');
+    mkdirSync(join(root, 'alpha', '.git'), { recursive: true });
+    mkdirSync(join(root, 'beta'), { recursive: true });
+    writeFileSync(join(root, 'notes.txt'), 'x');
+
+    const listing = store.listDirectories(root);
+    expect(listing.path).toBe(root);
+    expect(listing.parent).toBe(join(sandbox));
+    expect(listing.dirs.map((dir) => dir.name)).not.toContain('notes.txt');
+    expect(listing.dirs.find((dir) => dir.name === 'alpha')?.looksLikeProject).toBe(true);
+    expect(listing.dirs.find((dir) => dir.name === 'beta')?.looksLikeProject).toBe(false);
+  });
+
+  it('sorts folders that look like projects first', async () => {
+    const store = await loadStore();
+    store.ensureLayout();
+    const root = join(sandbox, 'sorted');
+    mkdirSync(join(root, 'aaa'), { recursive: true });
+    mkdirSync(join(root, 'zzz', 'src'), { recursive: true });
+    writeFileSync(join(root, 'zzz', 'package.json'), '{}');
+
+    const listing = store.listDirectories(root);
+    expect(listing.dirs[0]?.name).toBe('zzz');
+    expect(listing.looksLikeProject).toBe(false);
+  });
+
+  it('does not call a folder a project just because one manifest sits in it', async () => {
+    const store = await loadStore();
+    store.ensureLayout();
+    const root = join(sandbox, 'stray');
+    mkdirSync(join(root, 'loose'), { recursive: true });
+    writeFileSync(join(root, 'loose', 'package.json'), '{}');
+
+    expect(store.listDirectories(root).dirs[0]?.looksLikeProject).toBe(false);
+
+    mkdirSync(join(root, 'loose', 'src'), { recursive: true });
+    expect(store.listDirectories(root).dirs[0]?.looksLikeProject).toBe(true);
+  });
+
+  it('hides dotfolders by default and counts them', async () => {
+    const store = await loadStore();
+    store.ensureLayout();
+    const root = join(sandbox, 'hidden');
+    mkdirSync(join(root, '.config'), { recursive: true });
+    mkdirSync(join(root, 'src'), { recursive: true });
+
+    const plain = store.listDirectories(root);
+    expect(plain.dirs.map((dir) => dir.name)).toEqual(['src']);
+    expect(plain.hiddenCount).toBe(1);
+
+    const wide = store.listDirectories(root, true);
+    expect(wide.dirs.map((dir) => dir.name).sort()).toEqual(['.config', 'src']);
+    expect(wide.hiddenCount).toBe(0);
+  });
+
+  it('reports a folder it cannot read instead of throwing', async () => {
+    const store = await loadStore();
+    store.ensureLayout();
+    const listing = store.listDirectories(join(sandbox, 'does-not-exist'));
+    expect(listing.dirs).toEqual([]);
+  });
+});
+
+describe('common places', () => {
+  it('always offers the home folder and never invents one', async () => {
+    const store = await loadStore();
+    store.ensureLayout();
+    const places = store.commonPlaces();
+    expect(places[0]?.path).toBe(sandbox);
+    for (const place of places) expect(existsSync(place.path)).toBe(true);
   });
 });

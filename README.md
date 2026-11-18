@@ -42,11 +42,17 @@ Three steps, each one screen.
 
 **3. Put people on duty.** An assignment is a named teammate with a role — planner, builder, reviewer, or any — pointed at one model or one CLI. Give them names you will recognise in the run log. That roster is the only thing that can execute work.
 
-The same screen detects CLI agents already on your machine: Codex, Claude Code, OpenCode, Hermes, Cursor. Authorizing one is a checkbox. A CLI runs as a subprocess in your workspace with the prompt as its argument; it uses whatever credentials it already has, and Anti Slop never reads them.
+The same screen detects agents already on your machine, wherever the installer put them: Codex, Claude Code, OpenCode, Hermes, Cursor, and DeepAI Code. It looks on `PATH`, in the usual app folders, and one level into the dotfolders in your home directory, because that is where these tools tend to land.
+
+Authorizing a CLI is a checkbox. It runs as a subprocess in your project folder with the prompt as its argument, uses whatever credentials it already has, and Anti Slop never reads them.
+
+DeepAI Code is different, and the screen says so rather than pretending otherwise. It is a desktop app with no one-shot prompt command, so Anti Slop opens it on your project folder and hands you the brief to send in its own window. Any row marked `session app` works this way: the tool is opened and pointed at the right folder, and you finish the job where that tool expects you to.
 
 ## Running a job
 
 Write the brief, pick a folder, press start.
+
+The folder is any directory on this Mac. The picker opens on your home folder, marks the folders that look like projects, and lets you walk anywhere, dotfolders included. A folder you use is remembered: save it on the way past and it sits in your project list, so the next brief is one click. The support folder under `Application Support` is not a project and the dashboard never pretends it is.
 
 The planner reads your roster and splits the brief into between one and eight tasks with explicit dependencies. Tasks run in dependency order, in parallel where nothing blocks, each one handed to a teammate whose role fits. If planning fails, a fixed three-step plan is used instead, so a run never dies because one model had a bad day.
 
@@ -80,6 +86,10 @@ antiSL uninstall       # delete the support folder (asks, then --yes)
 Today is where a brief is written and where the roster you authorized is laid out beside it.
 
 ![Today: write a brief](docs/screens/today.jpg)
+
+The folder picker walks your whole disk and remembers what you use. Folders that look like projects are marked, and the ones you save sit in the left column for next time.
+
+![Choose a project folder](docs/screens/folder-picker.jpg)
 
 Team is the authorization surface. Every endpoint, every model id, every CLI on this machine, and who is on duty.
 
