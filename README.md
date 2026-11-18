@@ -4,7 +4,7 @@ A local dashboard for your AI coding tools. One prompt goes in, a small team of 
 
 Anti Slop does not ship a model and does not proxy your traffic through anyone. You bring the keys, you say who is on duty, and everything runs on your machine.
 
-![The Anti Slop dashboard](assets/brand/social.svg)
+![The Anti Slop dashboard](docs/screens/today.jpg)
 
 ## The folder rule
 
@@ -72,8 +72,30 @@ antiSL --no-open       # do not open a browser
 antiSL doctor          # check the install, Node version, and folder
 antiSL where           # print the support folder path
 antiSL runs            # list recent runs
-antiSL uninstall       # remove the launcher
+antiSL uninstall       # delete the support folder (asks, then --yes)
 ```
+
+## The screens
+
+Today is where a brief is written and where the roster you authorized is laid out beside it.
+
+![Today: write a brief](docs/screens/today.jpg)
+
+Team is the authorization surface. Every endpoint, every model id, every CLI on this machine, and who is on duty.
+
+![Team: authorize who can work](docs/screens/team.jpg)
+
+Runs is the ledger of everything dispatched, kept after the fact.
+
+![Runs: the ledger](docs/screens/runs.jpg)
+
+A run opens onto its plan, what each teammate is doing right now, and the output as it streams in.
+
+![A run in progress](docs/screens/run-detail.jpg)
+
+Settings holds concurrency, the default working folder, the planner, and the theme.
+
+![Settings](docs/screens/settings.jpg)
 
 ## Development
 
